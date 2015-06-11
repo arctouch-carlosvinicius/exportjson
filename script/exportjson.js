@@ -21,11 +21,9 @@ function onOpen() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var menuEntries = [
     {name: "Export JSON for this sheet", functionName: "exportJSONSheet"},
-    {name: "Export JSON for all sheets", functionName: "exportJSONAllSheets"},
-    {name: "Configure export", functionName: "exportOptions"},
+   // {name: "Export JSON for all sheets", functionName: "exportJSONAllSheets"},
+   // {name: "Configure export", functionName: "exportOptions"},
     null, /* separator */
-    {name: "Export MySQL for this sheet", functionName: "exportMySQLSheet"},
-    {name: "Export MySQL for all sheets", functionName: "exportMySQLAllSheets"},
   ];
   ss.addMenu("Export", menuEntries);
 }
@@ -95,45 +93,29 @@ function exportAllSheets(e, format) {
     var sheetName = sheet.getName(); 
     sheetsData[sheetName] = rowsData;
   }
-//  Logger.log(sheetsData);
+
   switch(format) {
     case 'json':
       var disp = makeJSON_(sheetsData, getExportOptions(e));
       var disp_format = 'JSON';
-    case 'mysql':
-      var disp = makeMySQL_(sheetsData);
-      var disp_format = 'MySQL';
   }
-//  Logger.log(disp);
   return displayText_(disp, disp_format);
 }
+
 function exportJSONAllSheets(e) {
   return exportAllSheets(e, 'json');
-}
-
-function exportMySQLAllSheets(e) {
-  return exportAllSheets(e, 'mysql');
 }
   
 function exportSheet(e, format) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
   var rowsData = getRowsData_(sheet, getExportOptions(e));
-//  Logger.log(rowsData);
   switch(format) {
     case 'json':
       var disp = makeJSON_(rowsData, getExportOptions(e));
       var disp_format = 'JSON';
       break;
-    case 'mysql':
-      // wrap data with the sheet name
-      var sheets = {};
-      sheets[sheet.getName()] = rowsData;
-      var disp = makeMySQL_(sheets);
-      var disp_format = 'MySQL';
-      break;
   }
-//  Logger.log(disp);
   return displayText_(disp, disp_format);
 }
 
@@ -141,10 +123,6 @@ function exportJSONSheet(e) {
   return exportSheet(e, 'json');
 }
 
-function exportMySQLSheet(e) {
-  return exportSheet(e, 'mysql');
-}
-  
 function getExportOptions(e) {
   var options = {};
   
@@ -177,28 +155,6 @@ function makeJSON_(object, options) {
     jsonString = jsonString.replace(/"([a-zA-Z]*)":\s+"/gi, '"$1": u"');
   }
   return jsonString;
-}
-
-function makeMySQL_(sheets) {
-  // iterate through all sheets, then all rows, then all columns
-  var mysql = '';
-  for (var name in sheets) {
-    var sheet_length = sheets[name].length;
-    for (var i = 0; i < sheet_length; i++) {
-      var properties = '';
-      var values = '';
-      for (var prop in sheets[name][i]) {
-        properties += '`' + prop + '`, ';
-        values += '\'' + sheets[name][i][prop] + '\', ';
-      }
-      // remove final extraneous commas
-      properties = properties.slice(0, properties.length - 2)
-      values = values.slice(0, values.length - 2)
-
-      mysql += 'insert into `' + name + '` (' + properties + ') values (' + values + ');\n';
-    }
-  }
-  return mysql;
 }
 
 function displayText_(text, format) {
@@ -265,14 +221,21 @@ function getObjects_(data, keys) {
     var hasData = false;
     for (var j = 0; j < data[i].length; ++j) {
       var cellData = data[i][j];
-      if (isCellEmpty_(cellData)) {
-        continue;
+      
+      if(typeof(keys[j]) === "undefined") {
+          continue;
       }
-      object[keys[j]] = cellData;
-      hasData = true;
+      
+      if (isCellEmpty_(cellData)) {
+          object[keys[j]] = "";
+          
+      } else {
+          object[keys[j]] = cellData;
+          hasData = true;
+      }
     }
     if (hasData) {
-      objects.push(object);
+       objects.push(object);
     }
   }
   return objects;
@@ -283,10 +246,12 @@ function getObjects_(data, keys) {
 //   - headers: Array of Strings to normalize
 function normalizeHeaders_(headers) {
   var keys = [];
-  for (var i = 0; i < headers.length; ++i) {
+  for (var i = 0; i < headers.length-1; ++i) {
     var key = normalizeHeader_(headers[i]);
-    if (key.length > 0) {
+    if (key.length > 0 && key != "") {
       keys.push(key);
+    } else {
+      break;
     }
   }
   return keys;
@@ -302,6 +267,17 @@ function normalizeHeaders_(headers) {
 //   "Market Cap (millions) -> "marketCapMillions
 //   "1 number at the beginning is ignored" -> "numberAtTheBeginningIsIgnored"
 function normalizeHeader_(header) {
+  var key = "";
+  var upperCase = false;
+  for (var i = 0; i < header.length; ++i) {
+    var letter = header[i];
+     key += letter;
+  }
+  return key;
+}
+
+
+function normalizeHeaderCamelCase_(header) {
   var key = "";
   var upperCase = false;
   for (var i = 0; i < header.length; ++i) {
@@ -330,7 +306,7 @@ function normalizeHeader_(header) {
 // Arguments:
 //   - cellData: string
 function isCellEmpty_(cellData) {
-  return typeof(cellData) == "string" && cellData == "";
+  return (typeof(cellData) == "string" && cellData == "");
 }
 
 // Returns true if the character char is alphabetical, false otherwise.
